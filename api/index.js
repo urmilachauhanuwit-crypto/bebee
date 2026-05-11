@@ -2,7 +2,6 @@ module.exports = async (req, res) => {
   const targetDomain = "talents.studysmarter.co.uk";
   const proxyHost = req.headers.host;
 
-  // Strip hop-by-hop headers that can't be forwarded
   const HOP_BY_HOP = [
     "connection", "keep-alive", "proxy-authenticate",
     "proxy-authorization", "te", "trailers",
@@ -13,7 +12,6 @@ module.exports = async (req, res) => {
     Object.entries(req.headers).filter(([k]) => !HOP_BY_HOP.includes(k.toLowerCase()))
   );
 
-  // Read body for non-GET/HEAD requests
   let bodyBuffer = null;
   if (req.method !== "GET" && req.method !== "HEAD") {
     bodyBuffer = await new Promise((resolve, reject) => {
@@ -29,45 +27,64 @@ module.exports = async (req, res) => {
     host: targetDomain,
     "x-forwarded-host": proxyHost,
     "x-forwarded-proto": "https",
-    "x-forwarded-for": "2.125.160.216",   // UK IP (Oxford) — prevents geo-redirect to .de
+    "x-forwarded-for": "2.125.160.216",
     "x-real-ip": "2.125.160.216",
     "cf-ipcountry": "GB",
     "accept-language": "en-GB,en;q=0.9",
   };
 
   try {
-    // One fetch, redirect: "manual" — we handle redirects ourselves
-    const response = await fetch(`https://${targetDomain}${req.url}`, {
-      method: req.method,
-      headers: upstreamHeaders,
-      body: bodyBuffer || undefined,
-      redirect: "manual",
-    });
+    let fetchURL = `https://${targetDomain}${req.url}`;
+    let response;
+    let redirectCount = 0;
 
-    // --- Handle redirects ---
-    if (response.status >= 300 && response.status < 400) {
-      let location = response.headers.get("location") || "";
+    // Follow ALL redirects server-side — never let a redirect reach the client browser
+    while (redirectCount < 10) {
+      response = await fetch(fetchURL, {
+        method: req.method,
+        headers: upstreamHeaders,
+        body: bodyBuffer || undefined,
+        redirect: "manual",
+      });
 
-      // Block geo-redirects to .de / .eu / .com variants
-      if (
-        location.includes("studysmarter.de") ||
-        location.includes("studysmarter.eu") ||
-        (location.includes("studysmarter.com") && !location.includes("studysmarter.co.uk"))
-      ) {
-        // Redirect client to the same path on the proxy instead
-        return res.redirect(302, `https://${proxyHost}${req.url}`);
+      if (response.status >= 300 && response.status < 400) {
+        let location = response.headers.get("location") || "";
+
+        // Geo-redirect to .de/.eu/.com — strip domain, keep path, re-fetch on .co.uk
+        if (
+          location.includes("studysmarter.de") ||
+          location.includes("studysmarter.eu") ||
+          (location.includes("studysmarter.com") && !location.includes(".co.uk"))
+        ) {
+          try {
+            const u = new URL(location);
+            fetchURL = `https://${targetDomain}${u.pathname}${u.search}`;
+          } catch {
+            fetchURL = `https://${targetDomain}/`;
+          }
+          redirectCount++;
+          continue;
+        }
+
+        // Normal redirect — follow server-side
+        if (location.startsWith("http")) {
+          fetchURL = location;
+        } else {
+          fetchURL = `https://${targetDomain}${location}`;
+        }
+
+        redirectCount++;
+        continue;
       }
 
-      // Rewrite .co.uk URLs to proxy host
-      location = location
-        .replace(`https://${targetDomain}`, `https://${proxyHost}`)
-        .replace(`http://${targetDomain}`, `https://${proxyHost}`);
-
-      res.setHeader("location", location);
-      return res.status(response.status).end();
+      break; // Got a real response
     }
 
-    // --- Copy safe response headers ---
+    if (!response || redirectCount >= 10) {
+      return res.status(502).send("Too many upstream redirects");
+    }
+
+    // Copy safe response headers to client
     const SKIP_HEADERS = [
       "content-encoding", "transfer-encoding",
       "content-length", "connection",
@@ -89,17 +106,15 @@ module.exports = async (req, res) => {
         .split(`https://${targetDomain}`).join(`https://${proxyHost}`)
         .split(`http://${targetDomain}`).join(`https://${proxyHost}`);
 
-    // --- HTML ---
+    // HTML
     if (contentType.includes("text/html")) {
       let body = rewrite(await response.text());
 
-      // Inject Google Search Console verification
       body = body.replace(
         "<head>",
         `<head>\n<meta name="google-site-verification" content="oOB4GFrNSNdykfLPFYsy8byFMtrbAiccGJfrX7_UcOU" />`
       );
 
-      // Update JobPosting schema dates
       body = body.replace(
         /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi,
         (match, json) => {
@@ -126,25 +141,25 @@ module.exports = async (req, res) => {
       return res.status(response.status).send(body);
     }
 
-    // --- CSS ---
+    // CSS
     if (contentType.includes("text/css")) {
       res.setHeader("content-type", "text/css");
       return res.status(response.status).send(rewrite(await response.text()));
     }
 
-    // --- Sitemap / XML ---
+    // Sitemap / XML
     if (req.url.includes("sitemap") || contentType.includes("xml")) {
       res.setHeader("content-type", "application/xml; charset=utf-8");
       return res.status(response.status).send(rewrite(await response.text()));
     }
 
-    // --- JavaScript ---
+    // JavaScript
     if (contentType.includes("javascript")) {
       res.setHeader("content-type", contentType);
       return res.status(response.status).send(rewrite(await response.text()));
     }
 
-    // --- Binary passthrough ---
+    // Binary passthrough
     const buffer = await response.arrayBuffer();
     return res.status(response.status).send(Buffer.from(buffer));
 
