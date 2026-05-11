@@ -3,21 +3,20 @@ export const config = {
 };
 
 export default async function handler(req) {
-  const targetDomain = "talents.studysmarter.co.uk";
+  const targetDomain = "jobs.stevenagefc.com";
   const proxyHost = new URL(req.url).host;
   const requestURL = new URL(req.url);
 
-  // Headers to never forward upstream
   const STRIP_HEADERS = [
     "connection", "keep-alive", "proxy-authenticate",
     "proxy-authorization", "te", "trailers",
     "transfer-encoding", "upgrade",
-    "cookie",           // removes geo/locale cookies
-    "x-forwarded-for",  // removes visitor's real IP (India etc.)
-    "x-real-ip",        // same
-    "cf-connecting-ip", // Cloudflare visitor IP
-    "cf-ipcountry",     // Cloudflare visitor country
-    "true-client-ip",   // Akamai/CF visitor IP
+    "cookie",
+    "x-forwarded-for",
+    "x-real-ip",
+    "cf-connecting-ip",
+    "cf-ipcountry",
+    "true-client-ip",
   ];
 
   const cleanHeaders = {};
@@ -27,13 +26,11 @@ export default async function handler(req) {
     }
   }
 
-  // Only set what we control — no visitor IP leaking through
   const upstreamHeaders = {
     ...cleanHeaders,
     host: targetDomain,
     "x-forwarded-host": proxyHost,
     "x-forwarded-proto": "https",
-    "accept-language": "en-GB,en;q=0.9",
   };
 
   const rewrite = (text) =>
@@ -57,23 +54,7 @@ export default async function handler(req) {
       if (response.status >= 300 && response.status < 400) {
         let location = response.headers.get("location") || "";
 
-        // Geo-redirect to .de/.eu — strip and force back to .co.uk
-        if (
-          location.includes("studysmarter.de") ||
-          location.includes("studysmarter.eu") ||
-          (location.includes("studysmarter.com") && !location.includes(".co.uk"))
-        ) {
-          try {
-            const u = new URL(location);
-            fetchURL = `https://${targetDomain}${u.pathname}${u.search}`;
-          } catch {
-            fetchURL = `https://${targetDomain}/`;
-          }
-          redirectCount++;
-          continue;
-        }
-
-        // Normal redirect — follow server-side
+        // Follow redirect server-side
         fetchURL = location.startsWith("http")
           ? location
           : `https://${targetDomain}${location}`;
@@ -107,12 +88,6 @@ export default async function handler(req) {
     // HTML
     if (contentType.includes("text/html")) {
       let body = rewrite(await response.text());
-
-      // Inject Google Search Console verification
-      body = body.replace(
-        "<head>",
-        `<head>\n<meta name="google-site-verification" content="oOB4GFrNSNdykfLPFYsy8byFMtrbAiccGJfrX7_UcOU" />`
-      );
 
       // Update JobPosting schema dates
       body = body.replace(
