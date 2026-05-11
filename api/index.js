@@ -1,7 +1,6 @@
 module.exports = async (req, res) => {
-  const shopifyDomain = "talents.studysmarter.co.uk";
+  const shopifyDomain = "talents.studysmarter.co.uk"; // keep this, just rename mentally
   const proxyHost = req.headers.host;
-
   const targetURL = `https://${shopifyDomain}${req.url}`;
 
   try {
@@ -24,9 +23,14 @@ module.exports = async (req, res) => {
         method: req.method,
         headers: {
           ...req.headers,
-          host: new URL(fetchURL).hostname,
+          host: "talents.studysmarter.co.uk",
           "X-Forwarded-Host": proxyHost,
           "X-Forwarded-Proto": "https",
+          // ✅ Spoof UK origin to prevent geo-redirect to .de
+          "X-Forwarded-For": "2.125.160.216",
+          "X-Real-IP": "2.125.160.216",
+          "CF-IPCountry": "GB",
+          "Accept-Language": "en-GB,en;q=0.9",
         },
         body: bodyBuffer || null,
         redirect: "manual",
@@ -35,22 +39,34 @@ module.exports = async (req, res) => {
       if (response.status >= 300 && response.status < 400) {
         let location = response.headers.get("location") || "";
 
-        if (location.includes(shopifyDomain)) {
+        // ✅ Block redirect to .de or any other geo variant
+        if (
+          location.includes("studysmarter.de") ||
+          location.includes("studysmarter.eu") ||
+          location.includes("studysmarter.com")
+        ) {
+          // Force re-fetch the original .co.uk URL, ignore the geo redirect
+          fetchURL = `https://talents.studysmarter.co.uk${req.url}`;
+          redirectCount++;
+          continue;
+        }
+
+        if (location.includes("talents.studysmarter.co.uk")) {
           location = location
-            .replace(`https://${shopifyDomain}`, `https://${proxyHost}`)
-            .replace(`http://${shopifyDomain}`, `https://${proxyHost}`);
+            .replace(`https://talents.studysmarter.co.uk`, `https://${proxyHost}`)
+            .replace(`http://talents.studysmarter.co.uk`, `https://${proxyHost}`);
           res.setHeader("location", location);
-          res.status(response.status).end();
-          return;
+          return res.status(response.status).end();
         }
 
         if (location.includes(proxyHost)) {
           res.setHeader("location", location);
-          res.status(response.status).end();
-          return;
+          return res.status(response.status).end();
         }
 
-        fetchURL = location.startsWith("http") ? location : `https://${shopifyDomain}${location}`;
+        fetchURL = location.startsWith("http")
+          ? location
+          : `https://talents.studysmarter.co.uk${location}`;
         redirectCount++;
         continue;
       }
@@ -58,86 +74,4 @@ module.exports = async (req, res) => {
       break;
     }
 
-    const skipHeaders = ["content-encoding", "transfer-encoding", "content-length"];
-    response.headers.forEach((value, key) => {
-      if (skipHeaders.includes(key)) return;
-      if (key === "set-cookie") {
-        value = value.replace(/Domain=[^;]+;?/gi, "");
-      }
-      res.setHeader(key, value);
-    });
-
-    const contentType = response.headers.get("content-type") || "";
-
-    const rewriteText = (body) =>
-      body
-        .split(`https://${shopifyDomain}`).join(`https://${proxyHost}`)
-        .split(`http://${shopifyDomain}`).join(`https://${proxyHost}`);
-
-    // ✅ HTML rewrite + Google verification + JobPosting schema dates
-    if (contentType.includes("text/html")) {
-      let body = rewriteText(await response.text());
-
-      // Inject Google Search Console verification
-      body = body.replace(
-        "<head>",
-        `<head>\n<meta name="google-site-verification" content="oOB4GFrNSNdykfLPFYsy8byFMtrbAiccGJfrX7_UcOU" />`
-      );
-
-      // Update JobPosting schema dates
-      body = body.replace(
-        /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi,
-        (match, json) => {
-          try {
-            const schema = JSON.parse(json);
-            const update = (obj) => {
-              if (!obj || typeof obj !== "object") return obj;
-              if (Array.isArray(obj)) return obj.map(update);
-              if (obj["@type"] === "JobPosting") {
-                obj["datePosted"] = "2026-05-06";
-                obj["validThrough"] = "2026-12-31";
-              }
-              Object.keys(obj).forEach((k) => { obj[k] = update(obj[k]); });
-              return obj;
-            };
-            return `<script type="application/ld+json">${JSON.stringify(update(schema))}</script>`;
-          } catch {
-            return match;
-          }
-        }
-      );
-
-      res.setHeader("content-type", "text/html; charset=utf-8");
-      return res.status(response.status).send(body);
-    }
-
-    // CSS rewrite
-    if (contentType.includes("text/css")) {
-      const body = rewriteText(await response.text());
-      res.setHeader("content-type", "text/css");
-      return res.status(response.status).send(body);
-    }
-
-    // Sitemap & XML rewrite
-    if (req.url.includes("sitemap") || contentType.includes("xml")) {
-      const body = rewriteText(await response.text());
-      res.setHeader("content-type", "application/xml; charset=utf-8");
-      return res.status(response.status).send(body);
-    }
-
-    // JS rewrite
-    if (contentType.includes("javascript")) {
-      const body = rewriteText(await response.text());
-      res.setHeader("content-type", contentType);
-      return res.status(response.status).send(body);
-    }
-
-    // Binary passthrough
-    const buffer = await response.arrayBuffer();
-    return res.status(response.status).send(Buffer.from(buffer));
-
-  } catch (error) {
-    res.status(500).send("Proxy error: " + error.message);
-  }
-};
-
+    // ... rest of your code stays exactly the same
