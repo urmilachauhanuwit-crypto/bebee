@@ -1,5 +1,5 @@
 module.exports = async (req, res) => {
-  const targetDomain = "bebee.com";
+  const targetDomain = "https://dailyremote.com";
   const proxyHost = req.headers.host;
 
   const HOP_BY_HOP = [
