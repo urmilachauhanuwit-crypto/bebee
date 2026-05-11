@@ -8,8 +8,11 @@ module.exports = async (req, res) => {
     "transfer-encoding", "upgrade",
   ];
 
+  // Strip hop-by-hop AND cookies (cookies carry geo/locale state from .de visits)
+  const STRIP_HEADERS = [...HOP_BY_HOP, "cookie"];
+
   const cleanHeaders = Object.fromEntries(
-    Object.entries(req.headers).filter(([k]) => !HOP_BY_HOP.includes(k.toLowerCase()))
+    Object.entries(req.headers).filter(([k]) => !STRIP_HEADERS.includes(k.toLowerCase()))
   );
 
   let bodyBuffer = null;
@@ -27,10 +30,11 @@ module.exports = async (req, res) => {
     host: targetDomain,
     "x-forwarded-host": proxyHost,
     "x-forwarded-proto": "https",
-    "x-forwarded-for": "2.125.160.216",
+    "x-forwarded-for": "2.125.160.216",  // UK IP
     "x-real-ip": "2.125.160.216",
     "cf-ipcountry": "GB",
     "accept-language": "en-GB,en;q=0.9",
+    // No cookie header at all — prevents WordPress geo-redirect
   };
 
   try {
@@ -38,8 +42,7 @@ module.exports = async (req, res) => {
     let response;
     let redirectCount = 0;
 
-    // Follow ALL redirects server-side — never let a redirect reach the client browser
-    while (redirectCount < 10) {
+    while (redirectCount < 5) {
       response = await fetch(fetchURL, {
         method: req.method,
         headers: upstreamHeaders,
@@ -50,7 +53,7 @@ module.exports = async (req, res) => {
       if (response.status >= 300 && response.status < 400) {
         let location = response.headers.get("location") || "";
 
-        // Geo-redirect to .de/.eu/.com — strip domain, keep path, re-fetch on .co.uk
+        // Geo-redirect to another studysmarter domain — force back to .co.uk
         if (
           location.includes("studysmarter.de") ||
           location.includes("studysmarter.eu") ||
@@ -67,32 +70,29 @@ module.exports = async (req, res) => {
         }
 
         // Normal redirect — follow server-side
-        if (location.startsWith("http")) {
-          fetchURL = location;
-        } else {
-          fetchURL = `https://${targetDomain}${location}`;
-        }
-
+        fetchURL = location.startsWith("http")
+          ? location
+          : `https://${targetDomain}${location}`;
         redirectCount++;
         continue;
       }
 
-      break; // Got a real response
+      break;
     }
 
-    if (!response || redirectCount >= 10) {
+    if (!response || redirectCount >= 5) {
       return res.status(502).send("Too many upstream redirects");
     }
 
-    // Copy safe response headers to client
-    const SKIP_HEADERS = [
-      "content-encoding", "transfer-encoding",
-      "content-length", "connection",
+    // Copy safe response headers
+    const SKIP_RESPONSE_HEADERS = [
+      "content-encoding", "transfer-encoding", "content-length", "connection",
     ];
 
     for (const [key, value] of response.headers.entries()) {
-      if (SKIP_HEADERS.includes(key.toLowerCase())) continue;
+      if (SKIP_RESPONSE_HEADERS.includes(key.toLowerCase())) continue;
       if (key.toLowerCase() === "set-cookie") {
+        // Strip domain from cookies so they apply to proxy host
         res.setHeader(key, value.replace(/Domain=[^;]+;?\s*/gi, ""));
         continue;
       }
@@ -110,11 +110,13 @@ module.exports = async (req, res) => {
     if (contentType.includes("text/html")) {
       let body = rewrite(await response.text());
 
+      // Inject Google Search Console verification
       body = body.replace(
         "<head>",
         `<head>\n<meta name="google-site-verification" content="oOB4GFrNSNdykfLPFYsy8byFMtrbAiccGJfrX7_UcOU" />`
       );
 
+      // Update JobPosting schema dates
       body = body.replace(
         /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi,
         (match, json) => {
