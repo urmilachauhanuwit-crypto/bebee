@@ -1,5 +1,5 @@
 module.exports = async (req, res) => {
-  const targetDomain = "https://dailyremote.com";
+  const targetDomain = "dailyremote.com";
   const proxyHost = req.headers.host;
 
   const HOP_BY_HOP = [
@@ -8,7 +8,7 @@ module.exports = async (req, res) => {
     "transfer-encoding", "upgrade",
   ];
 
-  // Strip hop-by-hop AND cookies (cookies carry geo/locale state from .de visits)
+  // Strip hop-by-hop and cookies to avoid session/geo issues
   const STRIP_HEADERS = [...HOP_BY_HOP, "cookie"];
 
   const cleanHeaders = Object.fromEntries(
@@ -30,11 +30,6 @@ module.exports = async (req, res) => {
     host: targetDomain,
     "x-forwarded-host": proxyHost,
     "x-forwarded-proto": "https",
-    "x-forwarded-for": "2.125.160.216",  // UK IP
-    "x-real-ip": "2.125.160.216",
-    "cf-ipcountry": "GB",
-    "accept-language": "en-GB,en;q=0.9",
-    // No cookie header at all — prevents WordPress geo-redirect
   };
 
   try {
@@ -53,26 +48,11 @@ module.exports = async (req, res) => {
       if (response.status >= 300 && response.status < 400) {
         let location = response.headers.get("location") || "";
 
-        // Geo-redirect to another studysmarter domain — force back to .co.uk
-        if (
-          location.includes("studysmarter.de") ||
-          location.includes("studysmarter.eu") ||
-          (location.includes("studysmarter.com") && !location.includes(".co.uk"))
-        ) {
-          try {
-            const u = new URL(location);
-            fetchURL = `https://${targetDomain}${u.pathname}${u.search}`;
-          } catch {
-            fetchURL = `https://${targetDomain}/`;
-          }
-          redirectCount++;
-          continue;
-        }
-
-        // Normal redirect — follow server-side
+        // Follow redirect server-side
         fetchURL = location.startsWith("http")
           ? location
           : `https://${targetDomain}${location}`;
+
         redirectCount++;
         continue;
       }
@@ -92,7 +72,6 @@ module.exports = async (req, res) => {
     for (const [key, value] of response.headers.entries()) {
       if (SKIP_RESPONSE_HEADERS.includes(key.toLowerCase())) continue;
       if (key.toLowerCase() === "set-cookie") {
-        // Strip domain from cookies so they apply to proxy host
         res.setHeader(key, value.replace(/Domain=[^;]+;?\s*/gi, ""));
         continue;
       }
@@ -110,13 +89,7 @@ module.exports = async (req, res) => {
     if (contentType.includes("text/html")) {
       let body = rewrite(await response.text());
 
-      // Inject Google Search Console verification
-      body = body.replace(
-        "<head>",
-        `<head>\n<meta name="google-site-verification" content="oOB4GFrNSNdykfLPFYsy8byFMtrbAiccGJfrX7_UcOU" />`
-      );
-
-      // Update JobPosting schema dates
+      // Update JobPosting schema dates for SEO
       body = body.replace(
         /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi,
         (match, json) => {
@@ -161,7 +134,7 @@ module.exports = async (req, res) => {
       return res.status(response.status).send(rewrite(await response.text()));
     }
 
-    // Binary passthrough
+    // Binary passthrough (images, fonts, etc.)
     const buffer = await response.arrayBuffer();
     return res.status(response.status).send(Buffer.from(buffer));
 
