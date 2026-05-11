@@ -1,28 +1,25 @@
-module.exports = async (req, res) => {
-  const targetDomain = "dailyremote.com";
-  const proxyHost = req.headers.host;
+export const config = {
+  runtime: "edge",
+};
+
+export default async function handler(req) {
+  const targetDomain = "talents.studysmarter.co.uk";
+  const proxyHost = new URL(req.url).host;
+  const requestURL = new URL(req.url);
+  const targetURL = `https://${targetDomain}${requestURL.pathname}${requestURL.search}`;
 
   const HOP_BY_HOP = [
     "connection", "keep-alive", "proxy-authenticate",
     "proxy-authorization", "te", "trailers",
-    "transfer-encoding", "upgrade",
+    "transfer-encoding", "upgrade", "cookie",
   ];
 
-  // Strip hop-by-hop and cookies to avoid session/geo issues
-  const STRIP_HEADERS = [...HOP_BY_HOP, "cookie"];
-
-  const cleanHeaders = Object.fromEntries(
-    Object.entries(req.headers).filter(([k]) => !STRIP_HEADERS.includes(k.toLowerCase()))
-  );
-
-  let bodyBuffer = null;
-  if (req.method !== "GET" && req.method !== "HEAD") {
-    bodyBuffer = await new Promise((resolve, reject) => {
-      const chunks = [];
-      req.on("data", (chunk) => chunks.push(chunk));
-      req.on("end", () => resolve(Buffer.concat(chunks)));
-      req.on("error", reject);
-    });
+  // Clean headers
+  const cleanHeaders = {};
+  for (const [key, value] of req.headers.entries()) {
+    if (!HOP_BY_HOP.includes(key.toLowerCase())) {
+      cleanHeaders[key] = value;
+    }
   }
 
   const upstreamHeaders = {
@@ -32,8 +29,13 @@ module.exports = async (req, res) => {
     "x-forwarded-proto": "https",
   };
 
+  const rewrite = (text) =>
+    text
+      .split(`https://${targetDomain}`).join(`https://${proxyHost}`)
+      .split(`http://${targetDomain}`).join(`https://${proxyHost}`);
+
   try {
-    let fetchURL = `https://${targetDomain}${req.url}`;
+    let fetchURL = targetURL;
     let response;
     let redirectCount = 0;
 
@@ -41,18 +43,33 @@ module.exports = async (req, res) => {
       response = await fetch(fetchURL, {
         method: req.method,
         headers: upstreamHeaders,
-        body: bodyBuffer || undefined,
+        body: req.method !== "GET" && req.method !== "HEAD" ? req.body : undefined,
         redirect: "manual",
       });
 
       if (response.status >= 300 && response.status < 400) {
         let location = response.headers.get("location") || "";
 
-        // Follow redirect server-side
+        // Geo-redirect to another studysmarter domain — force back to .co.uk
+        if (
+          location.includes("studysmarter.de") ||
+          location.includes("studysmarter.eu") ||
+          (location.includes("studysmarter.com") && !location.includes(".co.uk"))
+        ) {
+          try {
+            const u = new URL(location);
+            fetchURL = `https://${targetDomain}${u.pathname}${u.search}`;
+          } catch {
+            fetchURL = `https://${targetDomain}/`;
+          }
+          redirectCount++;
+          continue;
+        }
+
+        // Normal redirect — follow server-side
         fetchURL = location.startsWith("http")
           ? location
           : `https://${targetDomain}${location}`;
-
         redirectCount++;
         continue;
       }
@@ -61,35 +78,36 @@ module.exports = async (req, res) => {
     }
 
     if (!response || redirectCount >= 5) {
-      return res.status(502).send("Too many upstream redirects");
+      return new Response("Too many upstream redirects", { status: 502 });
     }
 
-    // Copy safe response headers
     const SKIP_RESPONSE_HEADERS = [
       "content-encoding", "transfer-encoding", "content-length", "connection",
     ];
 
+    const responseHeaders = new Headers();
     for (const [key, value] of response.headers.entries()) {
       if (SKIP_RESPONSE_HEADERS.includes(key.toLowerCase())) continue;
       if (key.toLowerCase() === "set-cookie") {
-        res.setHeader(key, value.replace(/Domain=[^;]+;?\s*/gi, ""));
+        responseHeaders.set(key, value.replace(/Domain=[^;]+;?\s*/gi, ""));
         continue;
       }
-      res.setHeader(key, value);
+      responseHeaders.set(key, value);
     }
 
     const contentType = response.headers.get("content-type") || "";
-
-    const rewrite = (text) =>
-      text
-        .split(`https://${targetDomain}`).join(`https://${proxyHost}`)
-        .split(`http://${targetDomain}`).join(`https://${proxyHost}`);
 
     // HTML
     if (contentType.includes("text/html")) {
       let body = rewrite(await response.text());
 
-      // Update JobPosting schema dates for SEO
+      // Inject Google Search Console verification
+      body = body.replace(
+        "<head>",
+        `<head>\n<meta name="google-site-verification" content="oOB4GFrNSNdykfLPFYsy8byFMtrbAiccGJfrX7_UcOU" />`
+      );
+
+      // Update JobPosting schema dates
       body = body.replace(
         /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi,
         (match, json) => {
@@ -112,34 +130,32 @@ module.exports = async (req, res) => {
         }
       );
 
-      res.setHeader("content-type", "text/html; charset=utf-8");
-      return res.status(response.status).send(body);
+      responseHeaders.set("content-type", "text/html; charset=utf-8");
+      return new Response(body, { status: response.status, headers: responseHeaders });
     }
 
     // CSS
     if (contentType.includes("text/css")) {
-      res.setHeader("content-type", "text/css");
-      return res.status(response.status).send(rewrite(await response.text()));
+      responseHeaders.set("content-type", "text/css");
+      return new Response(rewrite(await response.text()), { status: response.status, headers: responseHeaders });
     }
 
     // Sitemap / XML
-    if (req.url.includes("sitemap") || contentType.includes("xml")) {
-      res.setHeader("content-type", "application/xml; charset=utf-8");
-      return res.status(response.status).send(rewrite(await response.text()));
+    if (requestURL.pathname.includes("sitemap") || contentType.includes("xml")) {
+      responseHeaders.set("content-type", "application/xml; charset=utf-8");
+      return new Response(rewrite(await response.text()), { status: response.status, headers: responseHeaders });
     }
 
     // JavaScript
     if (contentType.includes("javascript")) {
-      res.setHeader("content-type", contentType);
-      return res.status(response.status).send(rewrite(await response.text()));
+      responseHeaders.set("content-type", contentType);
+      return new Response(rewrite(await response.text()), { status: response.status, headers: responseHeaders });
     }
 
-    // Binary passthrough (images, fonts, etc.)
-    const buffer = await response.arrayBuffer();
-    return res.status(response.status).send(Buffer.from(buffer));
+    // Binary passthrough
+    return new Response(response.body, { status: response.status, headers: responseHeaders });
 
   } catch (error) {
-    console.error("Proxy error:", error);
-    res.status(500).send("Proxy error: " + error.message);
+    return new Response("Proxy error: " + error.message, { status: 500 });
   }
-};
+}
