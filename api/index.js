@@ -6,27 +6,34 @@ export default async function handler(req) {
   const targetDomain = "talents.studysmarter.co.uk";
   const proxyHost = new URL(req.url).host;
   const requestURL = new URL(req.url);
-  const targetURL = `https://${targetDomain}${requestURL.pathname}${requestURL.search}`;
 
-  const HOP_BY_HOP = [
+  // Headers to never forward upstream
+  const STRIP_HEADERS = [
     "connection", "keep-alive", "proxy-authenticate",
     "proxy-authorization", "te", "trailers",
-    "transfer-encoding", "upgrade", "cookie",
+    "transfer-encoding", "upgrade",
+    "cookie",           // removes geo/locale cookies
+    "x-forwarded-for",  // removes visitor's real IP (India etc.)
+    "x-real-ip",        // same
+    "cf-connecting-ip", // Cloudflare visitor IP
+    "cf-ipcountry",     // Cloudflare visitor country
+    "true-client-ip",   // Akamai/CF visitor IP
   ];
 
-  // Clean headers
   const cleanHeaders = {};
   for (const [key, value] of req.headers.entries()) {
-    if (!HOP_BY_HOP.includes(key.toLowerCase())) {
+    if (!STRIP_HEADERS.includes(key.toLowerCase())) {
       cleanHeaders[key] = value;
     }
   }
 
+  // Only set what we control — no visitor IP leaking through
   const upstreamHeaders = {
     ...cleanHeaders,
     host: targetDomain,
     "x-forwarded-host": proxyHost,
     "x-forwarded-proto": "https",
+    "accept-language": "en-GB,en;q=0.9",
   };
 
   const rewrite = (text) =>
@@ -35,7 +42,7 @@ export default async function handler(req) {
       .split(`http://${targetDomain}`).join(`https://${proxyHost}`);
 
   try {
-    let fetchURL = targetURL;
+    let fetchURL = `https://${targetDomain}${requestURL.pathname}${requestURL.search}`;
     let response;
     let redirectCount = 0;
 
@@ -50,7 +57,7 @@ export default async function handler(req) {
       if (response.status >= 300 && response.status < 400) {
         let location = response.headers.get("location") || "";
 
-        // Geo-redirect to another studysmarter domain — force back to .co.uk
+        // Geo-redirect to .de/.eu — strip and force back to .co.uk
         if (
           location.includes("studysmarter.de") ||
           location.includes("studysmarter.eu") ||
