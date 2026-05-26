@@ -2,7 +2,7 @@ export const config = {
   runtime: "edge",
 };
 
-const TARGET = "jobs.stevenagefc.com";
+const TARGET = "amazon.browsejobstoday.com";
 
 const CUSTOM_HOME = `<!DOCTYPE html>
 <html lang="en">
