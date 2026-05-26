@@ -397,7 +397,26 @@ export default async function handler(req) {
 
     if (ct.includes("text/html")) {
       let body = rewrite(await response.text());
+
+      // ── KEY FIX: Remove redirect scripts from <head> server-side ──
+      const BLOCKED_DOMAINS = ['thebigjobsite.com', 'jobiak', 'browsejobstoday'];
+      body = body.replace(/<script[\s\S]*?<\/script>/gi, function(match) {
+        if (BLOCKED_DOMAINS.some(function(d){ return match.includes(d); })) {
+          return ''; // completely delete the redirect script
+        }
+        return match;
+      });
+
+      // ── Also remove any noscript blocks with blocked links ──
+      body = body.replace(/<noscript[\s\S]*?<\/noscript>/gi, function(match) {
+        if (BLOCKED_DOMAINS.some(function(d){ return match.includes(d); })) {
+          return '';
+        }
+        return match;
+      });
+
       body = body.replace(/<body[^>]*>/i, (m) => m + getInject());
+
       body = body.replace(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi, (match, json) => {
         try {
           const schema = JSON.parse(json);
@@ -414,6 +433,7 @@ export default async function handler(req) {
           return "<script type=\"application/ld+json\">" + JSON.stringify(update(schema)) + "<\/script>";
         } catch(e) { return match; }
       });
+
       resHeaders.set("content-type", "text/html; charset=utf-8");
       return new Response(body, { status: response.status, headers: resHeaders });
     }
