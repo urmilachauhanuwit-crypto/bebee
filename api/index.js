@@ -177,7 +177,6 @@ document.querySelectorAll('.step,.cat').forEach(function(el){obs.observe(el);});
 </body>
 </html>`;
 
-// Injected into every proxied inner page: header + full green dark theme override
 function getInject() {
   return `<style>
 /* ── Unique Hire Header ── */
@@ -194,177 +193,55 @@ body{padding-top:64px!important}
 @media(max-width:600px){#uh-bar nav a:not(.uh-btn){display:none}#uh-bar{padding:0 20px}}
 
 /* ── Green Dark Theme Override ── */
-/* Base */
 html,body{background:#080f0a!important;color:#e8f5e9!important}
-
-/* All red/orange/brand colors -> green */
 a{color:#00c853!important}
 a:hover{color:#00e676!important}
-
-/* Buttons */
 .button,.btn,button,[type=submit],[type=button],
 .ux-apply-button,.apply-button,.search-button,
-input[type=submit]{
-  background:#00e676!important;
-  color:#080f0a!important;
-  border-color:#00e676!important;
-  border-radius:2px!important;
-}
+input[type=submit]{background:#00e676!important;color:#080f0a!important;border-color:#00e676!important;border-radius:2px!important}
 .button:hover,.btn:hover,button:hover,
 .ux-apply-button:hover,.apply-button:hover,
-.search-button:hover{
-  background:#00c853!important;
-  color:#080f0a!important;
-}
-
-/* Header / nav from original site — hide it since we inject our own */
+.search-button:hover{background:#00c853!important;color:#080f0a!important}
 .ux-header,.site-header,.header-wrapper,
-#header,#site-header,.main-header{
-  display:none!important;
-}
-
-/* Page backgrounds */
+#header,#site-header,.main-header{display:none!important}
 .ux-content-wrap,.main-content,.content-area,
 #content,#main,.page-wrapper,.site-wrapper,
-.ux-site-wrapper{
-  background:#080f0a!important;
-  color:#e8f5e9!important;
-}
-
-/* Panels / cards */
+.ux-site-wrapper{background:#080f0a!important;color:#e8f5e9!important}
 .ux-job-summary,.job-summary,.job-item,
 .job-listing,.result-item,.listing-item,
-.card,.panel,.box{
-  background:#0d160f!important;
-  border-color:#1e3022!important;
-  color:#e8f5e9!important;
-}
-.ux-job-summary:hover,.job-item:hover,.listing-item:hover{
-  border-color:#007a33!important;
-  background:#152018!important;
-}
-
-/* Job titles */
+.card,.panel,.box{background:#0d160f!important;border-color:#1e3022!important;color:#e8f5e9!important}
+.ux-job-summary:hover,.job-item:hover,.listing-item:hover{border-color:#007a33!important;background:#152018!important}
 .ux-job-summary__title,.job-title,h2.title,h3.title,
-.listing-title,.result-title{
-  color:#fff!important;
-}
-.ux-job-summary__title a,.job-title a{
-  color:#00e676!important;
-}
-.ux-job-summary__title a:hover,.job-title a:hover{
-  color:#00c853!important;
-}
-
-/* Meta / labels */
+.listing-title,.result-title{color:#fff!important}
+.ux-job-summary__title a,.job-title a{color:#00e676!important}
+.ux-job-summary__title a:hover,.job-title a:hover{color:#00c853!important}
 .ux-job-summary__location,.ux-job-summary__salary,
 .ux-job-summary__company,.job-meta,.listing-meta,
-.result-meta,.job-location,.job-salary{
-  color:#6a8f70!important;
-}
-
-/* Search bar */
+.result-meta,.job-location,.job-salary{color:#6a8f70!important}
 .ux-search,.search-form,.search-bar,
-#job-search,#search-form,.search-wrapper{
-  background:#0d160f!important;
-  border-color:#1e3022!important;
-}
+#job-search,#search-form,.search-wrapper{background:#0d160f!important;border-color:#1e3022!important}
 .ux-search input,.search-form input,
-#job-search input,.search-bar input{
-  background:#152018!important;
-  color:#e8f5e9!important;
-  border-color:#1e3022!important;
-}
-.ux-search input:focus,.search-form input:focus{
-  border-color:#00e676!important;
-  outline:none!important;
-  box-shadow:0 0 0 2px rgba(0,230,118,0.15)!important;
-}
-
-/* Pagination */
-.pagination a,.pager a,.page-link{
-  background:#0d160f!important;
-  color:#6a8f70!important;
-  border-color:#1e3022!important;
-}
+#job-search input,.search-bar input{background:#152018!important;color:#e8f5e9!important;border-color:#1e3022!important}
+.ux-search input:focus,.search-form input:focus{border-color:#00e676!important;outline:none!important;box-shadow:0 0 0 2px rgba(0,230,118,0.15)!important}
+.pagination a,.pager a,.page-link{background:#0d160f!important;color:#6a8f70!important;border-color:#1e3022!important}
 .pagination a:hover,.pager a:hover,.page-link:hover,
-.pagination .active a,.pagination .current{
-  background:#00e676!important;
-  color:#080f0a!important;
-  border-color:#00e676!important;
-}
-
-/* Tags / badges */
-.tag,.badge,.label,.pill,.chip{
-  background:#152018!important;
-  color:#00e676!important;
-  border-color:#1e3022!important;
-}
-
-/* Sidebar */
+.pagination .active a,.pagination .current{background:#00e676!important;color:#080f0a!important;border-color:#00e676!important}
+.tag,.badge,.label,.pill,.chip{background:#152018!important;color:#00e676!important;border-color:#1e3022!important}
 .sidebar,.widget-area,#sidebar,
-.ux-sidebar,.filter-panel,.search-filters{
-  background:#0d160f!important;
-  border-color:#1e3022!important;
-  color:#e8f5e9!important;
-}
-
-/* Footer */
+.ux-sidebar,.filter-panel,.search-filters{background:#0d160f!important;border-color:#1e3022!important;color:#e8f5e9!important}
 footer,.footer,.site-footer,#footer,
-.ux-footer{
-  background:#080f0a!important;
-  border-top:1px solid #1e3022!important;
-  color:#6a8f70!important;
-}
-footer a,.footer a,.site-footer a{
-  color:#6a8f70!important;
-}
-footer a:hover,.footer a:hover{
-  color:#00e676!important;
-}
-
-/* Headings */
+.ux-footer{background:#080f0a!important;border-top:1px solid #1e3022!important;color:#6a8f70!important}
+footer a,.footer a,.site-footer a{color:#6a8f70!important}
+footer a:hover,.footer a:hover{color:#00e676!important}
 h1,h2,h3,h4,h5,h6{color:#fff!important}
-
-/* Inputs / selects */
-input,select,textarea{
-  background:#152018!important;
-  color:#e8f5e9!important;
-  border-color:#1e3022!important;
-  border-radius:2px!important;
-}
-input:focus,select:focus,textarea:focus{
-  border-color:#00e676!important;
-  outline:none!important;
-  box-shadow:0 0 0 2px rgba(0,230,118,0.15)!important;
-}
-
-/* Horizontal rules / dividers */
+input,select,textarea{background:#152018!important;color:#e8f5e9!important;border-color:#1e3022!important;border-radius:2px!important}
+input:focus,select:focus,textarea:focus{border-color:#00e676!important;outline:none!important;box-shadow:0 0 0 2px rgba(0,230,118,0.15)!important}
 hr{border-color:#1e3022!important}
-
-/* Breadcrumbs */
-.breadcrumb,.breadcrumbs,.ux-breadcrumb{
-  color:#6a8f70!important;
-}
+.breadcrumb,.breadcrumbs,.ux-breadcrumb{color:#6a8f70!important}
 .breadcrumb a,.breadcrumbs a{color:#00c853!important}
-
-/* Alerts / notices */
-.alert,.notice,.message{
-  background:#152018!important;
-  border-color:#1e3022!important;
-  color:#e8f5e9!important;
-}
-
-/* Cookie bar */
-.cookie-bar,.cookie-banner,.cookie-notice{
-  background:#0d160f!important;
-  border-top:1px solid #1e3022!important;
-  color:#6a8f70!important;
-}
-.cookie-bar .button,.cookie-banner .button{
-  background:#00e676!important;
-  color:#080f0a!important;
-}
+.alert,.notice,.message{background:#152018!important;border-color:#1e3022!important;color:#e8f5e9!important}
+.cookie-bar,.cookie-banner,.cookie-notice{background:#0d160f!important;border-top:1px solid #1e3022!important;color:#6a8f70!important}
+.cookie-bar .button,.cookie-banner .button{background:#00e676!important;color:#080f0a!important}
 </style>
 <div id="uh-bar">
   <a href="/" class="uh-logo"><span class="uh-dot"></span>Unique Hire</a>
@@ -373,7 +250,78 @@ hr{border-color:#1e3022!important}
     <a href="/careers-advice/">Career Advice</a>
     <a href="/advertiser/vacancies/vacancy/" class="uh-btn">Post a Job</a>
   </nav>
-</div>`;
+</div>
+<script>
+(function(){
+  const BLOCKED = ['thebigjobsite.com','jobiak','browsejobstoday'];
+
+  function isBlocked(url){
+    return url && BLOCKED.some(function(d){ return url.includes(d); });
+  }
+
+  // Block window.open
+  var origOpen = window.open.bind(window);
+  window.open = function(url){
+    if(isBlocked(url)) return null;
+    return origOpen.apply(window, arguments);
+  };
+
+  // Block all link clicks to blocked domains
+  document.addEventListener('click', function(e){
+    var a = e.target.closest('a');
+    if(!a) return;
+    var href = a.getAttribute('href') || '';
+    if(isBlocked(href)){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    }
+  }, true);
+
+  // Block location.assign and location.replace
+  var origAssign = window.location.assign.bind(window.location);
+  var origReplace = window.location.replace.bind(window.location);
+
+  window.location.assign = function(url){
+    if(isBlocked(url)) return;
+    origAssign(url);
+  };
+
+  window.location.replace = function(url){
+    if(isBlocked(url)) return;
+    origReplace(url);
+  };
+
+  // Poll as safety net for location.href changes
+  var lastHref = window.location.href;
+  setInterval(function(){
+    if(window.location.href !== lastHref){
+      if(isBlocked(window.location.href)){
+        window.history.back();
+      } else {
+        lastHref = window.location.href;
+      }
+    }
+  }, 50);
+
+  // Watch DOM for meta refresh or injected scripts
+  var observer = new MutationObserver(function(mutations){
+    mutations.forEach(function(m){
+      m.addedNodes.forEach(function(node){
+        if(node.tagName === 'META' && (node.httpEquiv||'').toLowerCase() === 'refresh'){
+          if(isBlocked(node.content||'')) node.remove();
+        }
+        if(node.tagName === 'SCRIPT' && isBlocked(node.src||'')) node.remove();
+        if(node.tagName === 'SCRIPT' && !node.src){
+          var txt = node.textContent || '';
+          if(isBlocked(txt)) node.remove();
+        }
+      });
+    });
+  });
+  observer.observe(document.documentElement, {childList:true, subtree:true});
+
+})();
+<\/script>`;
 }
 
 export default async function handler(req) {
