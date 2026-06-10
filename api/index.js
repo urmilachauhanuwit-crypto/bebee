@@ -2,7 +2,7 @@ export const config = {
   runtime: "edge",
 };
 
-const TARGET = "indianhealthyrecipes.com";
+const TARGET = "themediterraneandish.com";
 
 const CUSTOM_HOME = `<!DOCTYPE html>
 <html lang="en">
